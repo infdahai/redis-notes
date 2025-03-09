@@ -5,8 +5,9 @@ proc cluster_config_consistent {} {
     for {set j 0} {$j < [llength $::servers]} {incr j} {
         if {$j == 0} {
             set base_cfg [R $j cluster slots]
+            set base_secret [R $j debug internal_secret]
         } else {
-            if {[R $j cluster slots] != $base_cfg} {
+            if {[R $j cluster slots] != $base_cfg || [R $j debug internal_secret] != $base_secret} {
                 return 0
             }
         }
@@ -198,4 +199,31 @@ proc are_hostnames_propagated {match_string} {
         }
     }
     return 1
+}
+
+proc wait_node_marked_fail {ref_node_index instance_id_to_check} {
+    wait_for_condition 1000 50 {
+        [check_cluster_node_mark fail $ref_node_index $instance_id_to_check]
+    } else {
+        fail "Replica node never marked as FAIL ('fail')"
+    }
+}
+
+proc wait_node_marked_pfail {ref_node_index instance_id_to_check} {
+    wait_for_condition 1000 50 {
+        [check_cluster_node_mark fail\? $ref_node_index $instance_id_to_check]
+    } else {
+        fail "Replica node never marked as PFAIL ('fail?')"
+    }
+}
+
+proc check_cluster_node_mark {flag ref_node_index instance_id_to_check} {
+    set nodes [get_cluster_nodes $ref_node_index]
+
+    foreach n $nodes {
+        if {[dict get $n id] eq $instance_id_to_check} {
+            return [cluster_has_flag $n $flag]
+        }
+    }
+    fail "Unable to find instance id in cluster nodes. ID: $instance_id_to_check"
 }
